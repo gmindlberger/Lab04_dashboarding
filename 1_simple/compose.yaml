@@ -1,0 +1,16 @@
+services:
+
+  # jupyter notebook with pyspark integration
+  jupyter-spark:
+    image: ghcr.io/bihe/architecture-lab/jupyter_pyspark:3.5.5
+    container_name: jupyter-spark
+    hostname: jupyter-spark
+    volumes:
+      # if you are on linux with selinux (most distros these days)
+      # you need to take care the volume is mounted with the defined selinux labels
+      # https://docs.docker.com/engine/storage/bind-mounts/#configure-the-selinux-label
+      - ./notebooks:/home/jovyan/notebooks:z 
+    working_dir: /home/jovyan/notebooks
+    ports:
+      - "8888:8888"
+

@@ -1,0 +1,2 @@
+Host-Bind-Mount (OSXFS/LinuxKit) blockiert Rename:
+Auf Host-Volumes, die über Docker Desktop (Mac) oder vergleichbare Filesystem-Bridges gemountet wurden, kann dieser atomare Rename nicht ausgeführt werden. Das Resultat ist der oben gezeigte Deadlock.
