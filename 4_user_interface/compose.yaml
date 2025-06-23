@@ -1,0 +1,33 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - 3_pipeline_minio_data:/data    # Mount 3_pipeline to get data from Gold Layer from last exercise
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: streamlit-dashboard
+    depends_on:
+      - minio
+    ports:
+      - "8501:8501"
+    environment:
+      MINIO_ENDPOINT:    http://minio:9000
+      MINIO_ACCESS_KEY:  admin
+      MINIO_SECRET_KEY:  password
+      BUCKET_NAME:       batch-bucket
+      GOLD_FILE_NAME:    gold/weather/weather_aggregated.parquet
+
+volumes:
+  3_pipeline_minio_data:
+    external: true

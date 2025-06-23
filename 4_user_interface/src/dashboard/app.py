@@ -1,0 +1,148 @@
+import os
+from io import BytesIO
+
+import boto3
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+import streamlit as st
+# new UI Package
+from st_aggrid import AgGrid, GridOptionsBuilder
+
+st.set_page_config(
+    page_title="Gold Layer Weather Dashboard",
+    page_icon="🌟",
+    layout="wide",
+)
+
+# get the given key from the environment or use default value
+def get_env_default(key: str, default_val: str) -> str:
+    val = os.environ.get(key)
+    if val is None or val == "":
+        return default_val
+    return val
+
+MINIO_ENDPOINT   = get_env_default("MINIO_ENDPOINT", "http://localhost:9000")
+MINIO_ACCESS_KEY = get_env_default("MINIO_ACCESS_KEY", "admin")
+MINIO_SECRET_KEY = get_env_default("MINIO_SECRET_KEY", "password")
+BUCKET_NAME      = get_env_default("BUCKET_NAME", "weather-data")
+GOLD_FILE_NAME   = get_env_default("GOLD_FILE_NAME", "gold/weather_aggregated.parquet")
+
+# Initialize MinIO Client
+s3 = boto3.client(
+    "s3",
+    endpoint_url=MINIO_ENDPOINT,
+    aws_access_key_id=MINIO_ACCESS_KEY,
+    aws_secret_access_key=MINIO_SECRET_KEY,
+)
+
+# Load Data from MinIO
+@st.cache_data(ttl="10m", show_spinner="📦 Lade Daten …")
+def load_data() -> pd.DataFrame:
+    obj = s3.get_object(Bucket=BUCKET_NAME, Key=GOLD_FILE_NAME)
+    df = pd.read_parquet(BytesIO(obj["Body"].read()))
+
+    # Numerische Spalten sicherstellen
+    for col in ["avg_temp", "avg_humidity", "avg_wind_speed"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Datum parsen
+    if "date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["date"]):
+        df["date"] = pd.to_datetime(df["date"])
+
+    return df
+
+
+df = load_data()
+
+# Streamlit App UI
+st.title("🌟 Gold Layer Weather Data Dashboard")
+st.sidebar.header("Filters")
+
+selected_category = st.sidebar.selectbox(
+    "Temperature Category", df["temperature_category"].unique()
+)
+
+if "season" in df.columns:
+    seasons = st.sidebar.multiselect(
+        "Season", sorted(df["season"].unique()), default=list(df["season"].unique())
+    )
+else:
+    seasons = []
+
+if "date" in df.columns:
+    dmin, dmax = df["date"].min().date(), df["date"].max().date()
+    date_range = st.sidebar.date_input("Date Range", (dmin, dmax), min_value=dmin, max_value=dmax)
+else:
+    date_range = None
+
+
+def num_slider(col: str, label: str, step: float, fmt: str):
+    if col not in df.columns:
+        return None
+    cmin, cmax = float(df[col].min()), float(df[col].max())
+    return st.sidebar.slider(label, cmin, cmax, (cmin, cmax), step=step, format=fmt)
+
+
+temp_range  = num_slider("avg_temp",       "Ø Temperature (°C)", 0.1, "%0.1f")
+hum_range   = num_slider("avg_humidity",   "Ø Humidity (%)",     1.0, "%0.0f")
+wind_range  = num_slider("avg_wind_speed", "Ø Wind Speed (m/s)", 0.1, "%0.1f")
+
+# Filter Data
+filtered_df = df[df["temperature_category"] == selected_category]
+
+if seasons:
+    filtered_df = filtered_df[filtered_df["season"].isin(seasons)]
+if date_range and len(date_range) == 2:
+    filtered_df = filtered_df.query("@date_range[0] <= date <= @date_range[1]")
+if temp_range:
+    filtered_df = filtered_df[filtered_df["avg_temp"].between(*temp_range)]
+if hum_range:
+    filtered_df = filtered_df[filtered_df["avg_humidity"].between(*hum_range)]
+if wind_range:
+    filtered_df = filtered_df[filtered_df["avg_wind_speed"].between(*wind_range)]
+
+# KPI metrics
+st.subheader("Key Metrics")
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric("Rows", f"{len(filtered_df):,}")
+if "avg_temp" in filtered_df.columns:
+    c2.metric("Ø Temp (°C)", f"{filtered_df['avg_temp'].mean():.1f}")
+if "avg_humidity" in filtered_df.columns:
+    c3.metric("Ø Humidity (%)", f"{filtered_df['avg_humidity'].mean():.0f}")
+if "avg_wind_speed" in filtered_df.columns:
+    c4.metric("Ø Wind (m/s)", f"{filtered_df['avg_wind_speed'].mean():.1f}")
+
+#datatable AG-Grid
+st.subheader("Filtered Data")
+gob = GridOptionsBuilder.from_dataframe(filtered_df)
+gob.configure_pagination(paginationAutoPageSize=True)
+AgGrid(filtered_df, gridOptions=gob.build(), height=400, fit_columns_on_grid_load=True)
+
+#diagramms
+st.subheader("Distributions")
+num_cols = [c for c in ["avg_temp", "avg_humidity", "avg_wind_speed"] if c in filtered_df.columns]
+chosen_cols = st.multiselect("Numeric Columns", num_cols, default=num_cols[:1])
+for col in chosen_cols:
+    fig, ax = plt.subplots()
+    sns.histplot(filtered_df[col], kde=True, ax=ax)
+    ax.set(title=f"Distribution of {col}", xlabel=col, ylabel="Frequency")
+    st.pyplot(fig)
+
+if "season" in filtered_df.columns and not filtered_df.empty:
+    st.subheader("Count by Season")
+    season_cnt = (
+        filtered_df["season"].value_counts()
+        .reset_index(name="count")
+        .rename(columns={"index": "season"})
+    )
+    fig2, ax2 = plt.subplots()
+    sns.barplot(data=season_cnt, x="season", y="count", palette="viridis", ax=ax2)
+    ax2.set_xlabel("Season")
+    ax2.set_ylabel("Count")
+    st.pyplot(fig2)
+
+#footer
+st.info("Data auto-refreshes on reload (cache TTL 10 min).")

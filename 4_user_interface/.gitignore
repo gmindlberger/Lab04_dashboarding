@@ -1,2 +1,2 @@
 src/dashboard/.venv
-src/dashboard/Dockerfile
+docker/Dockerfile
