@@ -6,29 +6,35 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import streamlit as st
-# new UI Package
-from st_aggrid import AgGrid, GridOptionsBuilder
 
+#UI Components from streamlit
+from st_aggrid import AgGrid, GridOptionsBuilder
+from streamlit_echarts import st_echarts
+
+# -----------------------------------------------------------------------------
+# Streamlit-Page-Config
+# -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Gold Layer Weather Dashboard",
     page_icon="🌟",
     layout="wide",
 )
 
-# get the given key from the environment or use default value
+# -----------------------------------------------------------------------------
+# Helper: ENV-Variablen lesen
+# -----------------------------------------------------------------------------
 def get_env_default(key: str, default_val: str) -> str:
     val = os.environ.get(key)
-    if val is None or val == "":
-        return default_val
-    return val
+    return val if val else default_val
 
+# MinIO-Konfiguration
 MINIO_ENDPOINT   = get_env_default("MINIO_ENDPOINT", "http://localhost:9000")
 MINIO_ACCESS_KEY = get_env_default("MINIO_ACCESS_KEY", "admin")
 MINIO_SECRET_KEY = get_env_default("MINIO_SECRET_KEY", "password")
 BUCKET_NAME      = get_env_default("BUCKET_NAME", "weather-data")
 GOLD_FILE_NAME   = get_env_default("GOLD_FILE_NAME", "gold/weather_aggregated.parquet")
 
-# Initialize MinIO Client
+# MinIO-Client
 s3 = boto3.client(
     "s3",
     endpoint_url=MINIO_ENDPOINT,
@@ -36,7 +42,9 @@ s3 = boto3.client(
     aws_secret_access_key=MINIO_SECRET_KEY,
 )
 
-# Load Data from MinIO
+# -----------------------------------------------------------------------------
+# Daten laden & cachen
+# -----------------------------------------------------------------------------
 @st.cache_data(ttl="10m", show_spinner="📦 Lade Daten …")
 def load_data() -> pd.DataFrame:
     obj = s3.get_object(Bucket=BUCKET_NAME, Key=GOLD_FILE_NAME)
@@ -56,41 +64,58 @@ def load_data() -> pd.DataFrame:
 
 df = load_data()
 
-# Streamlit App UI
+# -----------------------------------------------------------------------------
+# Sidebar-Filter
+# -----------------------------------------------------------------------------
 st.title("🌟 Gold Layer Weather Data Dashboard")
 st.sidebar.header("Filters")
 
-selected_category = st.sidebar.selectbox(
-    "Temperature Category", df["temperature_category"].unique()
+# --- Temperature Category (MULTI-SELECT) ------------------------------------
+all_cats = sorted(df["temperature_category"].dropna().unique())
+sel_cats = st.sidebar.multiselect(
+    "Temperature Category",
+    options=all_cats,
+    default=all_cats,          # ⇒ standardmäßig alles gewählt
 )
 
+# --- Season ------------------------------------------------------------------
 if "season" in df.columns:
     seasons = st.sidebar.multiselect(
-        "Season", sorted(df["season"].unique()), default=list(df["season"].unique())
+        "Season",
+        sorted(df["season"].unique()),
+        default=list(df["season"].unique()),
     )
 else:
     seasons = []
 
+# --- Date Range --------------------------------------------------------------
 if "date" in df.columns:
     dmin, dmax = df["date"].min().date(), df["date"].max().date()
-    date_range = st.sidebar.date_input("Date Range", (dmin, dmax), min_value=dmin, max_value=dmax)
+    date_range = st.sidebar.date_input(
+        "Date Range", (dmin, dmax), min_value=dmin, max_value=dmax
+    )
 else:
     date_range = None
 
-
+# --- Numeric Slider Helper ---------------------------------------------------
 def num_slider(col: str, label: str, step: float, fmt: str):
     if col not in df.columns:
         return None
     cmin, cmax = float(df[col].min()), float(df[col].max())
     return st.sidebar.slider(label, cmin, cmax, (cmin, cmax), step=step, format=fmt)
 
-
 temp_range  = num_slider("avg_temp",       "Ø Temperature (°C)", 0.1, "%0.1f")
-hum_range   = num_slider("avg_humidity",   "Ø Humidity (%)",     1.0, "%0.0f")
+hum_range   = num_slider("avg_humidity",   "Ø Humidity (%)",     0.1, "%0.1f")
 wind_range  = num_slider("avg_wind_speed", "Ø Wind Speed (m/s)", 0.1, "%0.1f")
 
-# Filter Data
-filtered_df = df[df["temperature_category"] == selected_category]
+# -----------------------------------------------------------------------------
+# Daten filtern
+# -----------------------------------------------------------------------------
+filtered_df = df.copy()
+
+# Temp-Category: nur filtern, wenn nicht alle abgewählt
+if sel_cats:
+    filtered_df = filtered_df[filtered_df["temperature_category"].isin(sel_cats)]
 
 if seasons:
     filtered_df = filtered_df[filtered_df["season"].isin(seasons)]
@@ -103,7 +128,9 @@ if hum_range:
 if wind_range:
     filtered_df = filtered_df[filtered_df["avg_wind_speed"].between(*wind_range)]
 
-# KPI metrics
+# -----------------------------------------------------------------------------
+# KPI-Metrics
+# -----------------------------------------------------------------------------
 st.subheader("Key Metrics")
 c1, c2, c3, c4 = st.columns(4)
 
@@ -115,22 +142,30 @@ if "avg_humidity" in filtered_df.columns:
 if "avg_wind_speed" in filtered_df.columns:
     c4.metric("Ø Wind (m/s)", f"{filtered_df['avg_wind_speed'].mean():.1f}")
 
-#datatable AG-Grid
+# -----------------------------------------------------------------------------
+# Datatable via AG-Grid
+# -----------------------------------------------------------------------------
 st.subheader("Filtered Data")
 gob = GridOptionsBuilder.from_dataframe(filtered_df)
 gob.configure_pagination(paginationAutoPageSize=True)
 AgGrid(filtered_df, gridOptions=gob.build(), height=400, fit_columns_on_grid_load=True)
 
-#diagramms
+# -----------------------------------------------------------------------------
+# Distributions (Seaborn KDE)
+# -----------------------------------------------------------------------------
 st.subheader("Distributions")
 num_cols = [c for c in ["avg_temp", "avg_humidity", "avg_wind_speed"] if c in filtered_df.columns]
 chosen_cols = st.multiselect("Numeric Columns", num_cols, default=num_cols[:1])
+
 for col in chosen_cols:
-    fig, ax = plt.subplots()
-    sns.histplot(filtered_df[col], kde=True, ax=ax)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.kdeplot(filtered_df[col], fill=True, ax=ax)
     ax.set(title=f"Distribution of {col}", xlabel=col, ylabel="Frequency")
     st.pyplot(fig)
 
+# -----------------------------------------------------------------------------
+# Count by Season (Barplot)
+# -----------------------------------------------------------------------------
 if "season" in filtered_df.columns and not filtered_df.empty:
     st.subheader("Count by Season")
     season_cnt = (
@@ -138,11 +173,54 @@ if "season" in filtered_df.columns and not filtered_df.empty:
         .reset_index(name="count")
         .rename(columns={"index": "season"})
     )
-    fig2, ax2 = plt.subplots()
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
     sns.barplot(data=season_cnt, x="season", y="count", palette="viridis", ax=ax2)
     ax2.set_xlabel("Season")
     ax2.set_ylabel("Count")
     st.pyplot(fig2)
 
-#footer
+# -----------------------------------------------------------------------------
+# 🚀 Radar-Chart – Seasonal Averages (Temp / Humidity / Wind)
+# -----------------------------------------------------------------------------
+if "season" in filtered_df.columns and not filtered_df.empty:
+    st.subheader("Seasonal Averages (Radar Chart)")
+
+    radar_df = (
+        filtered_df.groupby("season", as_index=False)
+        .agg(
+            avg_temp=("avg_temp", "mean"),
+            avg_humidity=("avg_humidity", "mean"),
+            avg_wind_speed=("avg_wind_speed", "mean"),
+        )
+        .round(2)
+    )
+
+    indicators = [
+        {"name": "Temp (°C)",    "max": 40},
+        {"name": "Humidity (%)", "max": 100},
+        {"name": "Wind (m/s)",   "max": 25},
+    ]
+
+    series_data = [
+        {
+            "value": [row["avg_temp"], row["avg_humidity"], row["avg_wind_speed"]],
+            "name": row["season"],
+        }
+        for _, row in radar_df.iterrows()
+    ]
+
+    option = {
+        "legend": {"data": radar_df["season"].tolist()},
+        "radar":  {"indicator": indicators, "radius": "70%"},
+        "series": [{
+            "type": "radar",
+            "data": series_data,
+            "areaStyle": {"opacity": 0.1},
+        }],
+    }
+    st_echarts(option, height="700px", width="100%")
+
+# -----------------------------------------------------------------------------
+# Footer
+# -----------------------------------------------------------------------------
 st.info("Data auto-refreshes on reload (cache TTL 10 min).")

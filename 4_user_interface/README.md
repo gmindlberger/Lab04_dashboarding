@@ -1,6 +1,6 @@
 # 🌟 Gold Layer Weather Dashboard
 
-A simple Streamlit application that visualises the aggregated *Gold‑Layer* weather data stored in MinIO.
+A lightweight Streamlit application that visualises the aggregated *Gold‑Layer* weather data stored in MinIO.
 
 ---
 
@@ -11,12 +11,12 @@ A simple Streamlit application that visualises the aggregated *Gold‑Layer* wea
 | **1. Run `3_pipeline` first** | The ETL pipeline writes the *gold* Parquet file that this dashboard immediately reads from the shared volume / MinIO bucket. |
 | **3. MinIO running & seeded** | Needs the bucket **`weather-data`** and object **`gold/weather_aggregated.parquet`**.                                        |
 
-> **Tip :** If you used the project’s `docker-compose` everything is already mounted – you only have to spin up the services in the right order (`3_pipeline` → `streamlit`).
+> **Tip:** Use the provided `docker-compose` then everything is already mounted – you only have to spin up the services in the right order (`3_pipeline` → `4_user_interface`).
 
 
 ## 🐳Running with Docker Compose
 
-The repository already ships a `docker-compose.yml` that starts MinIO and the Streamlit app. **Important:** make sure `3_pipeline` has populated the `weather-data` bucket first!
+The repository already ships a `compose.yaml` that starts MinIO and the Streamlit app. **Important:** make sure `3_pipeline` has populated the `weather-data` bucket first!
 
 ```bash
 # Build & start all services
@@ -45,9 +45,11 @@ If you use Docker compose these are already provided via `.env`.  Override them 
 
 ![Dashboard overview](docs/sc1.png)
 
-![Filter sidebar](docs/sc2.png)
+![Distribution of selected values](docs/sc2.png)
 
-![Plots tab](docs/sc3.png)
+![Count number of selected seasons](docs/sc3.png)
+
+![Radar chart of selected seasons](docs/sc4.png)
 
 ---
 
