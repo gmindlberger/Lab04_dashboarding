@@ -43,13 +43,13 @@ If you use Docker compose these are already provided via `.env`.  Override them 
 
 ## 🖼️ Running app
 
-![Dashboard overview](docs/sc1.png)
+![Dashboard overview](../Screenshots/4_user_interface/sc1.png)
 
-![Distribution of selected values](docs/sc2.png)
+![Distribution of selected values](../Screenshots/4_user_interface/sc2.png)
 
-![Count number of selected seasons](docs/sc3.png)
+![Count number of selected seasons](../Screenshots/4_user_interface/sc3.png)
 
-![Radar chart of selected seasons](docs/sc4.png)
+![Radar chart of selected seasons](../Screenshots/4_user_interface/sc4.png)
 
 ---
 
