@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# Helper: ENV-Variablen lesen
+# Read Environment variables
 # -----------------------------------------------------------------------------
 def get_env_default(key: str, default_val: str) -> str:
     val = os.environ.get(key)
@@ -43,19 +43,19 @@ s3 = boto3.client(
 )
 
 # -----------------------------------------------------------------------------
-# Daten laden & cachen
+# Data loading & caching
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl="10m", show_spinner="📦 Lade Daten …")
 def load_data() -> pd.DataFrame:
     obj = s3.get_object(Bucket=BUCKET_NAME, Key=GOLD_FILE_NAME)
     df = pd.read_parquet(BytesIO(obj["Body"].read()))
 
-    # Numerische Spalten sicherstellen
+    # get sure to serve numerical columns
     for col in ["avg_temp", "avg_humidity", "avg_wind_speed"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Datum parsen
+    # parse date to pandas date format
     if "date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["date"]):
         df["date"] = pd.to_datetime(df["date"])
 
@@ -65,7 +65,7 @@ def load_data() -> pd.DataFrame:
 df = load_data()
 
 # -----------------------------------------------------------------------------
-# Sidebar-Filter
+# Sidebar-filters
 # -----------------------------------------------------------------------------
 st.title("🌟 Gold Layer Weather Data Dashboard")
 st.sidebar.header("Filters")
@@ -109,11 +109,11 @@ hum_range   = num_slider("avg_humidity",   "Ø Humidity (%)",     0.1, "%0.1f")
 wind_range  = num_slider("avg_wind_speed", "Ø Wind Speed (m/s)", 0.1, "%0.1f")
 
 # -----------------------------------------------------------------------------
-# Daten filtern
+# Finally filter our data
 # -----------------------------------------------------------------------------
 filtered_df = df.copy()
 
-# Temp-Category: nur filtern, wenn nicht alle abgewählt
+# Temp-Category: just filter, if some category is picked
 if sel_cats:
     filtered_df = filtered_df[filtered_df["temperature_category"].isin(sel_cats)]
 
@@ -151,7 +151,7 @@ gob.configure_pagination(paginationAutoPageSize=True)
 AgGrid(filtered_df, gridOptions=gob.build(), height=400, fit_columns_on_grid_load=True)
 
 # -----------------------------------------------------------------------------
-# Distributions (Seaborn KDE)
+# Distributions
 # -----------------------------------------------------------------------------
 st.subheader("Distributions")
 num_cols = [c for c in ["avg_temp", "avg_humidity", "avg_wind_speed"] if c in filtered_df.columns]
@@ -164,7 +164,7 @@ for col in chosen_cols:
     st.pyplot(fig)
 
 # -----------------------------------------------------------------------------
-# Count by Season (Barplot)
+# Count by Season
 # -----------------------------------------------------------------------------
 if "season" in filtered_df.columns and not filtered_df.empty:
     st.subheader("Count by Season")
@@ -180,7 +180,7 @@ if "season" in filtered_df.columns and not filtered_df.empty:
     st.pyplot(fig2)
 
 # -----------------------------------------------------------------------------
-# 🚀 Radar-Chart – Seasonal Averages (Temp / Humidity / Wind)
+# Radar-Chart – Seasonal Averages (Temp / Humidity / Wind)
 # -----------------------------------------------------------------------------
 if "season" in filtered_df.columns and not filtered_df.empty:
     st.subheader("Seasonal Averages (Radar Chart)")
