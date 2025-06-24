@@ -6,12 +6,13 @@ A lightweight Streamlit application that visualises the aggregated *Gold‑Layer
 
 ## 📋 Prerequisites
 
-| Step                          | Why it matters                                                                                                               |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **1. Run `3_pipeline` first** | The ETL pipeline writes the *gold* Parquet file that this dashboard immediately reads from the shared volume / MinIO bucket. |
-| **3. MinIO running & seeded** | Needs the bucket **`weather-data`** and object **`gold/weather_aggregated.parquet`**.                                        |
+| Step | Why it matters |
+|------|----------------|
+| **1. Execute all three batch notebooks**<br>`3_pipeline/notebooks/medallion_batch/1_batch_ingest_bronze.ipynb` → `2_batch_process_silver.ipynb` → `3_batch_serving_gold.ipynb` | The notebooks fill MinIO with the final *Gold* layer data. After they finish, the dashboard can read every Parquet file directly—no extra ETL step required. |
+| **2. MinIO running & seeded** | The notebooks create the bucket **`batch-bucket`** and three Gold-layer objects:<br>• `gold/weather/weather_aggregated.parquet`<br>• `gold/retail/retail_aggregated.parquet`<br>• `gold/retail_weather/retail_weather_combined.parquet` |
 
-> **Tip:** Use the provided `docker-compose` then everything is already mounted – you only have to spin up the services in the right order (`3_pipeline` → `4_user_interface`).
+> **Tip:** Use the provided `docker-compose`; everything’s already mounted.  
+> Run the services in order as above (in point 1) described, then `docker compose up --build` to start **MinIO** and the **4_user_interface** dashboard.
 
 
 ## 🐳Running with Docker Compose
@@ -29,13 +30,15 @@ Once everything is green, visit `http://localhost:8501`.
 
 ## 🗺️Environment Variables
 
-| Variable           | Default                           | Description                           |
-| ------------------ | --------------------------------- | ------------------------------------- |
-| `MINIO_ENDPOINT`   | `http://localhost:9000`           | URL where MinIO is reachable          |
-| `MINIO_ACCESS_KEY` | `admin`                           | MinIO access key                      |
-| `MINIO_SECRET_KEY` | `password`                        | MinIO secret key                      |
-| `BUCKET_NAME`      | `weather-data`                    | Bucket that contains the Parquet file |
-| `GOLD_FILE_NAME`   | `gold/weather_aggregated.parquet` | Path to the aggregated Parquet file   |
+| Variable          | Default                      | Description                           |
+|-------------------| ---------------------------- | ------------------------------------- |
+| `MINIO_ENDPOINT`  | `http://localhost:9000`      | URL where MinIO is reachable          |
+| `MINIO_ACCESS_KEY` | `admin`                      | MinIO access key                      |
+| `MINIO_SECRET_KEY` | `password`                   | MinIO secret key                      |
+| `BUCKET_NAME`     | `batch-bucket`               | Bucket that contains the Parquet file |
+| `WEATHER_KEY`     | `gold/weather/weather_aggregated.parquet` | Path to the aggregated Parquet file   |
+| `RETAIL_KEY`     | `gold/retail/retail_aggregated.parquet` | Path to the aggregated Parquet file   |
+| `COMBO_KEY`     | `gold/retail_weather/retail_weather_combined.parquet` | Path to the aggregated Parquet file   |
 
 If you use Docker compose these are already provided via `.env`.  Override them in your shell if you need something different.
 
@@ -43,13 +46,25 @@ If you use Docker compose these are already provided via `.env`.  Override them 
 
 ## 🖼️ Running app
 
-![Dashboard overview](../Screenshots/4_user_interface/sc1.png)
+![](../Screenshots/4_user_interface/sc1.png)
 
-![Distribution of selected values](../Screenshots/4_user_interface/sc2.png)
+![](../Screenshots/4_user_interface/sc2.png)
 
-![Count number of selected seasons](../Screenshots/4_user_interface/sc3.png)
+![](../Screenshots/4_user_interface/sc3.png)
 
-![Radar chart of selected seasons](../Screenshots/4_user_interface/sc4.png)
+![](../Screenshots/4_user_interface/sc4.png)
+
+![](../Screenshots/4_user_interface/sc5.png)
+
+![](../Screenshots/4_user_interface/sc6.png)
+
+![](../Screenshots/4_user_interface/sc7.png)
+
+![](../Screenshots/4_user_interface/sc8.png)
+
+![](../Screenshots/4_user_interface/sc9.png)
+
+![](../Screenshots/4_user_interface/sc10.png)
 
 ---
 
